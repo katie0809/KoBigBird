@@ -35,18 +35,19 @@ class QAModel(BaseModel):
         start_logits, end_logits = outputs.start_logits, outputs.end_logits
         start_logits = self.tensor_to_list(start_logits)
         end_logits = self.tensor_to_list(end_logits)
-        sample_num = len(inputs["unique_id"])
-        for i in range(sample_num):
-            qas_id = "_".join(inputs["unique_id"][i].split("_")[:-1])
-            writer = open(os.path.join(self.pred_dir, str(qas_id)), "a")
-            write_data = {
-                "unique_id": inputs["unique_id"][i],
-                "start_logits": start_logits[i],
-                "end_logits": end_logits[i],
-            }
-            writer.write(json.dumps(write_data) + "\n")
-            writer.close()
-        return [None] * sample_num
+        # sample_num = len(inputs["unique_id"])
+        # for i in range(sample_num):
+        #     qas_id = "_".join(inputs["unique_id"][i].split("_")[:-1])
+        #     writer = open(os.path.join(self.pred_dir, str(qas_id)), "a")
+        #     write_data = {
+        #         "unique_id": inputs["unique_id"][i],
+        #         "start_logits": start_logits[i],
+        #         "end_logits": end_logits[i],
+        #     }
+        #     writer.write(json.dumps(write_data) + "\n")
+        #     writer.close()
+        results = [{"start_logits": start_logits, "end_logits": end_logits} for start_logits, end_logits in zip(start_logits, end_logits)]
+        return results
 
     @staticmethod
     def add_args(parser):

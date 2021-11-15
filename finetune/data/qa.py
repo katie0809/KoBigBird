@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import transformers.data.processors.squad as squad
 from tqdm import tqdm
-
+import pandas as pd
 
 class SquadExample:
     """
@@ -295,26 +295,14 @@ def squad_convert_example_to_features(
 
 def sample_writer(data, config, tokenizer, is_train):
     """process and write single 'paragraph-context' from squad-formed QA dataset"""
-    context = data["context"]
-    example = None
+    # context = data["context"]
+    example = data
     tok_to_orig_index = None
     orig_to_tok_index = None
     all_doc_tokens = None
     write_data = []
     for qas in data["qas"]:
-        is_impossible = qas.get("is_impossible", False)
-        example = SquadExample(
-            qas_id=qas["id"],
-            question_text=qas["question"],
-            context_text=context,
-            answer_text="" if is_impossible else qas["answers"][0]["text"],
-            start_position_character=0 if is_impossible else qas["answers"][0]["answer_start"],
-            title="",
-            answers=qas["answers"],
-            is_impossible=is_impossible,
-            doc_tokens=(None if example is None else example.doc_tokens),
-            char_to_word_offset=(None if example is None else example.char_to_word_offset),
-        )
+        # is_impossible = qas.get("is_impossible", False)
         features, tok_to_orig_index, orig_to_tok_index, all_doc_tokens = squad_convert_example_to_features(
             example=example,
             tokenizer=tokenizer,
@@ -470,15 +458,22 @@ def process_korquad_2(config, data_file, train):
 
 
 def process_kluemrc(config, data_file, train):
-    data = []
-    with open(data_file) as handle:
-        for datum in json.load(handle)["data"]:
-            datum = datum["paragraphs"]
-            for qas in datum:
-                for q in qas["qas"]:
-                    q["id"] = q.pop("guid")
-            data.extend(datum)
-    return data
+    input_data = pd.read_csv(data_file)
+    examples = []
+    for i, entry in tqdm(enumerate(input_data.itertuples())):
+        example = SquadExample(
+            question_type=1,
+            qas_id="aihub-mrc-v1_train_"+format(i, '06'),
+            question_text=entry.question,
+            context_text=entry.text,
+            answer_text=entry.answer,
+            start_position_character=entry.answer_start,
+            title=entry.title,
+            is_impossible=False,
+        )
+        examples.append(example)
+
+    return examples
 
 
 def process_tydiqa(config, data_file, train):
@@ -558,12 +553,16 @@ process_map = {
 
 
 def collate_fn(features):
-    input_ids = [sample["input_ids"] for sample in features]
-    attention_mask = [sample["attention_mask"] for sample in features]
-    token_type_ids = [sample["token_type_ids"] for sample in features]
-    start_position = [sample["start_position"] for sample in features]
-    end_position = [sample["end_position"] for sample in features]
-
+    # input_ids = [sample["input_ids"] for sample in features]
+    # attention_mask = [sample["attention_mask"] for sample in features]
+    # token_type_ids = [sample["token_type_ids"] for sample in features]
+    # start_position = [sample["start_position"] for sample in features]
+    # end_position = [sample["end_position"] for sample in features]
+    input_ids = [sample[0].numpy() for sample in features]
+    attention_mask = [sample[1].numpy() for sample in features]
+    token_type_ids = [sample[2].numpy() for sample in features]
+    start_position = [sample[3].numpy() for sample in features]
+    end_position = [sample[4].numpy() for sample in features]
     input_ids = torch.tensor(np.array(input_ids).astype(np.int64), dtype=torch.long)
     attention_mask = torch.tensor(np.array(attention_mask).astype(np.int8), dtype=torch.long)
     token_type_ids = torch.tensor(np.array(token_type_ids).astype(np.int8), dtype=torch.long)
@@ -576,6 +575,6 @@ def collate_fn(features):
         "start_positions": start_position,
         "end_positions": end_position,
     }
-    if "unique_id" in features[0]:
-        inputs["unique_id"] = [sample["unique_id"] for sample in features]
+    # if "unique_id" in features[0]:
+    inputs["unique_id"] = [str(i) for i, sample in enumerate(features)]
     return inputs
